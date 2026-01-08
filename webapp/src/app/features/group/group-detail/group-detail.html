@@ -1,0 +1,186 @@
+<div class="container">
+    <div style="margin-bottom: 24px;">
+        <a routerLink="/dashboard" style="display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+            &larr; Back to Dashboard
+        </a>
+    </div>
+
+    <div *ngIf="loading" style="text-align: center; color: var(--text-secondary); padding: 40px;">
+        Loading group details...
+    </div>
+
+    <div *ngIf="error" class="error-message" style="text-align: center; padding: 40px;">
+        {{ error }}
+    </div>
+
+    <div *ngIf="group">
+        <!-- Header Section -->
+        <div class="header-section">
+            <div>
+                <h1 style="margin-bottom: 8px;">{{ group.name }}</h1>
+                <p style="color: var(--text-secondary);">
+                    Code: <code style="background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px;">{{ group.code }}</code>
+                </p>
+            </div>
+            <button class="btn btn-primary" (click)="toggleExpenseForm()">
+                {{ showExpenseForm ? 'Cancel' : '+ Add Expense' }}
+            </button>
+        </div>
+
+        <!-- Expense Form -->
+        <div *ngIf="showExpenseForm" class="card" style="margin-bottom: 24px;">
+            <h3 style="margin-bottom: 16px;">Create New Expense</h3>
+            <form [formGroup]="expenseForm" (ngSubmit)="onExpenseSubmit()">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" formControlName="title" placeholder="e.g., Dinner at restaurant" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" formControlName="amount" placeholder="0.00" step="0.01" class="form-control" (input)="onSplitTypeChange()">
+                </div>
+
+                <div class="form-group">
+                    <label>Split Type</label>
+                    <select formControlName="splitType" class="form-control" (change)="onSplitTypeChange()">
+                        <option value="equal">Equal Split</option>
+                        <option value="exact">Exact Amounts</option>
+                        <option value="percentage">Percentage</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Splits</label>
+                    <div formArrayName="splits" class="splits-container">
+                        <div *ngFor="let split of splits.controls; let i = index" [formGroupName]="i" class="split-item">
+                            <span class="split-name">{{ split.get('userName')?.value }}</span>
+                            <input type="number" formControlName="amount" step="0.01" class="form-control split-input">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button type="submit" class="btn btn-primary" [disabled]="expenseForm.invalid">Create Expense</button>
+                    <button type="button" class="btn btn-secondary" (click)="toggleExpenseForm()">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Balances Section -->
+        <div class="card" style="margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3>Balances</h3>
+                <button class="btn btn-secondary" (click)="toggleSettlementForm()">
+                    {{ showSettlementForm ? 'Cancel' : 'Settle Up' }}
+                </button>
+            </div>
+
+            <div *ngIf="loadingBalances" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                Loading balances...
+            </div>
+
+            <div *ngIf="!loadingBalances && balances.length === 0" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                No balances yet
+            </div>
+
+            <div *ngIf="!loadingBalances && balances.length > 0" class="balance-grid">
+                <div *ngFor="let balance of balances" class="balance-card" [ngClass]="getBalanceClass(balance.balance)">
+                    <div class="balance-name">{{ balance.userName }}</div>
+                    <div class="balance-amount">
+                        <span *ngIf="balance.balance > 0">+</span>{{ balance.balance | number:'1.2-2' }}
+                    </div>
+                    <div class="balance-label">
+                        <span *ngIf="balance.balance > 0">gets back</span>
+                        <span *ngIf="balance.balance < 0">owes</span>
+                        <span *ngIf="balance.balance === 0">settled up</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settlement Form -->
+        <div *ngIf="showSettlementForm" class="card" style="margin-bottom: 24px;">
+            <h3 style="margin-bottom: 16px;">Record Settlement</h3>
+            <form [formGroup]="settlementForm" (ngSubmit)="onSettlementSubmit()">
+                <div class="form-group">
+                    <label>Pay To</label>
+                    <select formControlName="toUserId" class="form-control">
+                        <option value="">Select member</option>
+                        <option *ngFor="let member of group.members" [value]="member.userId">
+                            {{ member.userName || member.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" formControlName="amount" placeholder="0.00" step="0.01" class="form-control">
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 16px;">
+                    <button type="submit" class="btn btn-primary" [disabled]="settlementForm.invalid">Record Settlement</button>
+                    <button type="button" class="btn btn-secondary" (click)="toggleSettlementForm()">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Expenses List -->
+        <div class="card" style="margin-bottom: 24px;">
+            <h3 style="margin-bottom: 16px;">Expenses</h3>
+
+            <div *ngIf="loadingExpenses" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                Loading expenses...
+            </div>
+
+            <div *ngIf="!loadingExpenses && expenses.length === 0" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                No expenses yet. Add your first expense above!
+            </div>
+
+            <div *ngIf="!loadingExpenses && expenses.length > 0" class="expense-list">
+                <div *ngFor="let expense of expenses" class="expense-item">
+                    <div class="expense-header">
+                        <div>
+                            <div class="expense-title">{{ expense.title }}</div>
+                            <div class="expense-meta">
+                                Paid by {{ expense.paidByName }} • {{ expense.createdAt | date:'short' }}
+                            </div>
+                        </div>
+                        <div class="expense-amount">${{ expense.amount | number:'1.2-2' }}</div>
+                    </div>
+                    <div class="expense-splits">
+                        <span class="split-badge" *ngFor="let split of expense.splits">
+                            {{ split.userName }}: ${{ split.amount | number:'1.2-2' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settlement History -->
+        <div class="card">
+            <h3 style="margin-bottom: 16px;">Settlement History</h3>
+
+            <div *ngIf="loadingSettlements" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                Loading settlements...
+            </div>
+
+            <div *ngIf="!loadingSettlements && settlements.length === 0" style="text-align: center; padding: 20px; color: var(--text-secondary);">
+                No settlements yet
+            </div>
+
+            <div *ngIf="!loadingSettlements && settlements.length > 0" class="settlement-list">
+                <div *ngFor="let settlement of settlements" class="settlement-item">
+                    <div class="settlement-icon">💰</div>
+                    <div class="settlement-details">
+                        <div class="settlement-text">
+                            {{ settlement.fromUserName }} paid {{ settlement.toUserName }}
+                        </div>
+                        <div class="settlement-date">{{ settlement.createdAt | date:'short' }}</div>
+                    </div>
+                    <div class="settlement-amount">${{ settlement.amount | number:'1.2-2' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

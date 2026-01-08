@@ -1,0 +1,70 @@
+<div class="container">
+    <header class="dashboard-header">
+        <div class="welcome-text">
+            <h1>Dashboard</h1>
+            <p>Manage your expense groups</p>
+        </div>
+        <button (click)="logout()" class="btn" style="background: rgba(255,255,255,0.1); color: var(--text-primary);">Logout</button>
+    </header>
+
+    <div class="action-bar">
+        <button class="btn btn-primary" (click)="toggleCreate()">+ Create Group</button>
+        <button class="btn" style="border: 1px solid var(--border-color); color: var(--text-primary);" (click)="toggleJoin()">Join Group</button>
+    </div>
+
+    <div *ngIf="error" class="error-message" style="margin-bottom: 16px;">
+        {{ error }}
+    </div>
+
+    <!-- Modals for Create/Join -->
+    <div class="modal-backdrop" *ngIf="showCreateForm" (click)="toggleCreate()">
+        <div class="modal" (click)="$event.stopPropagation()">
+            <button class="close-btn" (click)="toggleCreate()">&times;</button>
+            <h2 style="margin-bottom: 16px;">Create New Group</h2>
+            <form [formGroup]="createGroupForm" (ngSubmit)="onCreateSubmit()">
+                <div class="form-group">
+                    <label>Group Name</label>
+                    <input formControlName="name" placeholder="e.g. Hawaii Trip">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;" [disabled]="createGroupForm.invalid">Create</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" *ngIf="showJoinForm" (click)="toggleJoin()">
+        <div class="modal" (click)="$event.stopPropagation()">
+            <button class="close-btn" (click)="toggleJoin()">&times;</button>
+            <h2 style="margin-bottom: 16px;">Join Group</h2>
+            <form [formGroup]="joinGroupForm" (ngSubmit)="onJoinSubmit()">
+                <div class="form-group">
+                    <label>Invite Code</label>
+                    <input formControlName="code" placeholder="Enter code">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;" [disabled]="joinGroupForm.invalid">Join</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Groups Grid -->
+    <div class="groups-grid">
+        <div *ngFor="let group of groups" class="card group-card" [routerLink]="['/groups', group.id]">
+            <div>
+                <div class="group-name">{{ group.name }}</div>
+                <div class="group-meta">Created {{ group.created_at | date }}</div>
+            </div>
+            <div style="margin-top: 16px; display: flex; align-items: center; color: var(--primary-color);">
+                <span>View Details</span>
+                <span style="font-size: 1.2em; margin-left: 4px;">&rarr;</span>
+            </div>
+        </div>
+
+        <div *ngIf="!isLoading && groups.length === 0" class="no-groups">
+            <h3>No groups yet</h3>
+            <p style="margin-top: 8px;">Create one or join an existing group to retrieve expenses.</p>
+        </div>
+        
+         <div *ngIf="isLoading" style="grid-column: 1/-1; text-align: center; color: var(--text-secondary);">
+            Loading groups...
+        </div>
+    </div>
+</div>
