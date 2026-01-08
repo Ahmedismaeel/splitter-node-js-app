@@ -1,0 +1,95 @@
+### Auth API
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+    "name": "Test User",
+    "email": "test@example.com",
+    "password": "password123"
+}
+
+### Login
+# @name login
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+    "email": "test@example.com",
+    "password": "password123"
+}
+
+### Variables
+@authToken = {{login.response.body.token}}
+
+### Groups API - Create Group
+POST http://localhost:5000/api/groups
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "name": "Vacation Trip"
+}
+
+### Groups API - List User Groups
+GET http://localhost:5000/api/groups
+Authorization: Bearer {{authToken}}
+###
+@groupId = 7dbb9896-3dd0-46eb-bac8-3c1922ca8b43
+### Groups API - Join Group (Replace Code)
+POST http://localhost:5000/api/groups/join
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "code": "ABC12345"
+}
+
+### Groups API - Get Detail (Replace UUID)
+GET http://localhost:5000/api/groups/{{groupId}}
+Authorization: Bearer {{authToken}}
+
+
+### Expenses API - Create Expense
+POST http://localhost:5000/api/expenses
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "groupId": "00000000-0000-0000-0000-000000000000",
+    "title": "Groceries",
+    "amount": 100.00,
+    "splitType": "equal",
+    "splits": [
+        { "userId": "00000000-0000-0000-0000-000000000000", "amount": 50.00 }
+    ]
+}
+
+### Expenses API - Get Group Expenses
+GET http://localhost:5000/api/expenses/group/{{groupId}}
+Authorization: Bearer {{authToken}}
+
+### Expenses API - Get Expense Details
+GET http://localhost:5000/api/expenses/{{groupId}}
+Authorization: Bearer {{authToken}}
+
+
+### Balances API - Get Group Balances
+GET http://localhost:5000/api/balances/group/{{groupId}}
+Authorization: Bearer {{authToken}}
+
+### Settlements API - Create Settlement
+POST http://localhost:5000/api/balances/settlements
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+    "groupId": "00000000-0000-0000-0000-000000000000",
+    "toUserId": "00000000-0000-0000-0000-000000000000",
+    "amount": 50.00
+}
+
+### Settlements API - Get History
+GET http://localhost:5000/api/balances/settlements/group/{{groupId}}
+Authorization: Bearer {{authToken}}
+
+
