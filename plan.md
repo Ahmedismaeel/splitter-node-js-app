@@ -66,7 +66,7 @@ expense-splitter-backend/
 ## Environment Variables (.env)
 
 ```env
-PORT=5000
+PORT=5001
 DATABASE_URL=postgresql://username:password@localhost:5432/expense_splitter
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 JWT_EXPIRE=7d
@@ -81,7 +81,7 @@ NODE_ENV=development
 require('dotenv').config();
 const app = require('./src/app');
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

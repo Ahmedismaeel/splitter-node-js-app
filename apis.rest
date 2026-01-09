@@ -1,5 +1,5 @@
-### Auth API
-POST http://localhost:5000/api/auth/register
+### Auth API - Register
+POST http://localhost:5001/api/auth/register
 Content-Type: application/json
 
 {
@@ -8,21 +8,63 @@ Content-Type: application/json
     "password": "password123"
 }
 
-### Login
+# Expected Response (201):
+# {
+#     "message": "User created successfully",
+#     "user": {
+#         "id": "uuid-string",
+#         "name": "Test User",
+#         "email": "test@example.com"
+#     },
+#     "token": "jwt-token-string"
+# }
+#
+# Error Response (409):
+# {
+#     "error": "Email already exists"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "All fields are required"
+# }
+
+### Auth API - Login
 # @name login
-POST http://localhost:5000/api/auth/login
+POST http://localhost:5001/api/auth/login
 Content-Type: application/json
 
 {
-    "email": "test@example.com",
-    "password": "password123"
+    "email": "foxahmed71@gmail.com",
+    "password": "123456789"
 }
+
+# Expected Response (200):
+# {
+#     "message": "Login successful",
+#     "user": {
+#         "id": "uuid-string",
+#         "name": "Ahmed",
+#         "email": "foxahmed71@gmail.com"
+#     },
+#     "token": "jwt-token-string"
+# }
+#
+# Error Response (401):
+# {
+#     "error": "Invalid credentials"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Email and password are required"
+# }
 
 ### Variables
 @authToken = {{login.response.body.token}}
 
 ### Groups API - Create Group
-POST http://localhost:5000/api/groups
+POST http://localhost:5001/api/groups
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
 
@@ -30,27 +72,116 @@ Authorization: Bearer {{authToken}}
     "name": "Vacation Trip"
 }
 
+# Expected Response (201):
+# {
+#     "message": "Group created",
+#     "group": {
+#         "id": "uuid-string",
+#         "name": "Vacation Trip",
+#         "invitation_code": "ABC123XY",
+#         "created_by": "uuid-string",
+#         "created_at": "2026-01-09T12:00:00.000Z"
+#     }
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Group name is required"
+# }
+
+
 ### Groups API - List User Groups
-GET http://localhost:5000/api/groups
+GET http://localhost:5001/api/groups
 Authorization: Bearer {{authToken}}
-###
-@groupId = 7dbb9896-3dd0-46eb-bac8-3c1922ca8b43
+
+# Expected Response (200):
+# [
+#     {
+#         "id": "uuid-string",
+#         "name": "Vacation Trip",
+#         "invitation_code": "ABC123XY",
+#         "created_by": "uuid-string",
+#         "created_at": "2026-01-09T12:00:00.000Z",
+#         "member_count": "3"
+#     },
+#     {
+#         "id": "uuid-string-2",
+#         "name": "Office Lunch",
+#         "invitation_code": "DEF456ZW",
+#         "created_by": "uuid-string-2",
+#         "created_at": "2026-01-08T10:00:00.000Z",
+#         "member_count": "5"
+#     }
+# ]
+
+@groupId = 362780d9-8bbc-4420-997a-12488af8543b
+
 ### Groups API - Join Group (Replace Code)
-POST http://localhost:5000/api/groups/join
+POST http://localhost:5001/api/groups/join
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
 
 {
-    "code": "ABC12345"
+    "code": "WDX1D72P"
 }
 
+# Expected Response (200):
+# {
+#     "message": "Joined group successfully",
+#     "groupId": "uuid-string"
+# }
+#
+# Error Response (404):
+# {
+#     "error": "Group not found"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "You are already a member of this group"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Invitation code is required"
+# }
+
 ### Groups API - Get Detail (Replace UUID)
-GET http://localhost:5000/api/groups/{{groupId}}
+GET http://localhost:5001/api/groups/{{groupId}}
 Authorization: Bearer {{authToken}}
 
+# Expected Response (200):
+# {
+#     "group": {
+#         "id": "uuid-string",
+#         "name": "Vacation Trip",
+#         "invitation_code": "ABC123XY",
+#         "created_by": "uuid-string",
+#         "created_at": "2026-01-09T12:00:00.000Z"
+#     },
+#     "members": [
+#         {
+#             "id": "uuid-string",
+#             "name": "Ahmed",
+#             "email": "foxahmed71@gmail.com",
+#             "joined_at": "2026-01-09T12:00:00.000Z"
+#         },
+#         {
+#             "id": "uuid-string-2",
+#             "name": "John Doe",
+#             "email": "john@example.com",
+#             "joined_at": "2026-01-09T13:00:00.000Z"
+#         }
+#     ]
+# }
+#
+# Error Response (403):
+# {
+#     "error": "Access denied: You are not a member of this group"
+# }
 
 ### Expenses API - Create Expense
-POST http://localhost:5000/api/expenses
+POST http://localhost:5001/api/expenses
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
 
@@ -60,25 +191,151 @@ Authorization: Bearer {{authToken}}
     "amount": 100.00,
     "splitType": "equal",
     "splits": [
-        { "userId": "00000000-0000-0000-0000-000000000000", "amount": 50.00 }
+        { "userId": "00000000-0000-0000-0000-000000000000", "amount": 50.00 },
+        { "userId": "11111111-1111-1111-1111-111111111111", "amount": 50.00 }
     ]
 }
 
+# Expected Response (201):
+# {
+#     "message": "Expense added successfully",
+#     "expense": {
+#         "id": "uuid-string",
+#         "group_id": "uuid-string",
+#         "title": "Groceries",
+#         "amount": 100.00,
+#         "paid_by": "uuid-string",
+#         "split_type": "equal",
+#         "date": "2026-01-09",
+#         "created_at": "2026-01-09T12:00:00.000Z"
+#     }
+# }
+#
+# Error Response (403):
+# {
+#     "error": "You are not a member of this group"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Split amounts do not equal total amount"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Missing required fields"
+# }
+
 ### Expenses API - Get Group Expenses
-GET http://localhost:5000/api/expenses/group/{{groupId}}
+GET http://localhost:5001/api/expenses/group/{{groupId}}
 Authorization: Bearer {{authToken}}
+
+# Expected Response (200):
+# [
+#     {
+#         "id": "uuid-string",
+#         "group_id": "uuid-string",
+#         "title": "Groceries",
+#         "amount": 100.00,
+#         "paid_by": "uuid-string",
+#         "paid_by_name": "Ahmed",
+#         "split_type": "equal",
+#         "date": "2026-01-09",
+#         "created_at": "2026-01-09T12:00:00.000Z"
+#     },
+#     {
+#         "id": "uuid-string-2",
+#         "group_id": "uuid-string",
+#         "title": "Dinner",
+#         "amount": 75.50,
+#         "paid_by": "uuid-string-2",
+#         "paid_by_name": "John Doe",
+#         "split_type": "equal",
+#         "date": "2026-01-08",
+#         "created_at": "2026-01-08T20:00:00.000Z"
+#     }
+# ]
+#
+# Error Response (403):
+# {
+#     "error": "Access denied"
+# }
 
 ### Expenses API - Get Expense Details
-GET http://localhost:5000/api/expenses/{{groupId}}
+GET http://localhost:5001/api/expenses/{{groupId}}
 Authorization: Bearer {{authToken}}
 
+# Expected Response (200):
+# {
+#     "id": "uuid-string",
+#     "group_id": "uuid-string",
+#     "title": "Groceries",
+#     "amount": 100.00,
+#     "paid_by": "uuid-string",
+#     "paid_by_name": "Ahmed",
+#     "split_type": "equal",
+#     "date": "2026-01-09",
+#     "created_at": "2026-01-09T12:00:00.000Z",
+#     "splits": [
+#         {
+#             "id": "uuid-string",
+#             "expense_id": "uuid-string",
+#             "user_id": "uuid-string",
+#             "user_name": "Ahmed",
+#             "amount_owed": 50.00
+#         },
+#         {
+#             "id": "uuid-string-2",
+#             "expense_id": "uuid-string",
+#             "user_id": "uuid-string-2",
+#             "user_name": "John Doe",
+#             "amount_owed": 50.00
+#         }
+#     ]
+# }
+#
+# Error Response (404):
+# {
+#     "error": "Expense not found"
+# }
+#
+# Error Response (403):
+# {
+#     "error": "Access denied"
+# }
 
 ### Balances API - Get Group Balances
-GET http://localhost:5000/api/balances/group/{{groupId}}
+GET http://localhost:5001/api/balances/group/{{groupId}}
 Authorization: Bearer {{authToken}}
 
+# Expected Response (200):
+# [
+#     {
+#         "id": "uuid-string",
+#         "name": "Ahmed",
+#         "balance": 25.50
+#     },
+#     {
+#         "id": "uuid-string-2",
+#         "name": "John Doe",
+#         "balance": -25.50
+#     },
+#     {
+#         "id": "uuid-string-3",
+#         "name": "Jane Smith",
+#         "balance": 0.00
+#     }
+# ]
+# Note: Positive balance means the user is owed money
+#       Negative balance means the user owes money
+#
+# Error Response (403):
+# {
+#     "error": "Access denied"
+# }
+
 ### Settlements API - Create Settlement
-POST http://localhost:5000/api/balances/settlements
+POST http://localhost:5001/api/balances/settlements
 Content-Type: application/json
 Authorization: Bearer {{authToken}}
 
@@ -88,8 +345,59 @@ Authorization: Bearer {{authToken}}
     "amount": 50.00
 }
 
+# Expected Response (201):
+# {
+#     "message": "Settlement recorded",
+#     "settlement": {
+#         "id": "uuid-string",
+#         "group_id": "uuid-string",
+#         "from_user_id": "uuid-string",
+#         "to_user_id": "uuid-string",
+#         "amount": 50.00,
+#         "settled_at": "2026-01-09T12:00:00.000Z"
+#     }
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Invalid settlement details"
+# }
+#
+# Error Response (400):
+# {
+#     "error": "Cannot settle with yourself"
+# }
+#
+# Error Response (403):
+# {
+#     "error": "One or both users are not in the group"
+# }
+
 ### Settlements API - Get History
-GET http://localhost:5000/api/balances/settlements/group/{{groupId}}
+GET http://localhost:5001/api/balances/settlements/group/{{groupId}}
 Authorization: Bearer {{authToken}}
 
+# Expected Response (200):
+# [
+#     {
+#         "id": "uuid-string",
+#         "group_id": "uuid-string",
+#         "from_user_id": "uuid-string",
+#         "from_name": "Ahmed",
+#         "to_user_id": "uuid-string-2",
+#         "to_name": "John Doe",
+#         "amount": 50.00,
+#         "settled_at": "2026-01-09T12:00:00.000Z"
+#     },
+#     {
+#         "id": "uuid-string-2",
+#         "group_id": "uuid-string",
+#         "from_user_id": "uuid-string-2",
+#         "from_name": "John Doe",
+#         "to_user_id": "uuid-string-3",
+#         "to_name": "Jane Smith",
+#         "amount": 25.00,
+#         "settled_at": "2026-01-08T15:00:00.000Z"
+#     }
+# ]
 

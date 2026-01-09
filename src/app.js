@@ -7,6 +7,7 @@ const groupRoutes = require('./routes/groups');
 const expenseRoutes = require('./routes/expenses');
 const balanceRoutes = require('./routes/balances');
 const errorHandler = require('./middleware/errorHandler');
+const logger = require('./middleware/logger');
 
 const app = express();
 
@@ -14,6 +15,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(logger);
 
 // Routes
 app.use('/api/auth', authRoutes);

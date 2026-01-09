@@ -2,7 +2,7 @@ require('dotenv').config();
 const app = require('./src/app');
 const pool = require('./src/config/database');
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Test DB Connection before starting server
 pool.query('SELECT NOW()', (err, res) => {
@@ -11,8 +11,9 @@ pool.query('SELECT NOW()', (err, res) => {
     process.exit(1);
   }
   console.log('Database connected successfully at:', res.rows[0].now);
-  
+
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 });
+
