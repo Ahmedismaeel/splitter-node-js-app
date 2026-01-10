@@ -10,6 +10,7 @@ router.post('/', groupController.createGroup);
 router.get('/', groupController.getUserGroups);
 router.post('/join', groupController.joinGroup);
 router.get('/:id', groupController.getGroupDetails);
+router.put('/:id', groupController.updateGroupName);
 // router.get('/:id/members', groupController.getGroupMembers); // Already included in details, but good to have separate if needed
 
 module.exports = router;

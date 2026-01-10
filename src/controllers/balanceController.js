@@ -1,4 +1,4 @@
-const pool = require('../config/database');
+const prisma = require('../config/prisma');
 
 // Get Group Balances
 exports.getGroupBalances = async (req, res, next) => {
@@ -6,86 +6,112 @@ exports.getGroupBalances = async (req, res, next) => {
         const { groupId } = req.params;
 
         // Verify membership
-        const memberCheck = await pool.query(
-            'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
-            [groupId, req.user.id]
-        );
-        if (memberCheck.rows.length === 0) {
+        const isMember = await prisma.group_members.findFirst({
+            where: {
+                group_id: groupId,
+                user_id: req.user.id
+            }
+        });
+
+        if (!isMember) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
+        // Get all group members
+        const members = await prisma.users.findMany({
+            where: {
+                group_members: {
+                    some: {
+                        group_id: groupId
+                    }
+                }
+            },
+            select: {
+                id: true,
+                name: true
+            }
+        });
+
         // 1. Calculate Expenses Paid (Credit)
-        const expensesPaidQuery = `
-            SELECT paid_by as user_id, SUM(amount) as total_paid
-            FROM expenses
-            WHERE group_id = $1
-            GROUP BY paid_by
-        `;
-        
+        const expensesPaid = await prisma.expenses.groupBy({
+            by: ['paid_by'],
+            where: {
+                group_id: groupId
+            },
+            _sum: {
+                amount: true
+            }
+        });
+
         // 2. Calculate Share Owed (Debit)
-        const expensesOwedQuery = `
-            SELECT es.user_id, SUM(es.amount_owed) as total_owed
-            FROM expense_splits es
-            JOIN expenses e ON es.expense_id = e.id
-            WHERE e.group_id = $1
-            GROUP BY es.user_id
-        `;
+        const expensesOwed = await prisma.expense_splits.groupBy({
+            by: ['user_id'],
+            where: {
+                expenses: {
+                    group_id: groupId
+                }
+            },
+            _sum: {
+                amount_owed: true
+            }
+        });
 
-        // 3. Calculate Settlements Given (Debit for payer, Credit for receiver)
-        // Wait, Settlement is: User A pays User B.
-        // A's balance increases (or debt decreases). A is "giving" money.
-        // B's balance decreases (or credit decreases). B is "receiving" money.
-        // Effectively, A has "paid" more into the group pot (via direct transfer), and B has "received" back.
-        
-        // Let's stick to "Net Balance" = (Total Paid in Expenses + Total Settlements Given) - (Total Share of Expenses + Total Settlements Received)
-        
-        const settlementsGivenQuery = `
-            SELECT from_user_id as user_id, SUM(amount) as total_given
-            FROM settlements
-            WHERE group_id = $1
-            GROUP BY from_user_id
-        `;
+        // 3. Calculate Settlements Given
+        const settlementsGiven = await prisma.settlements.groupBy({
+            by: ['from_user_id'],
+            where: {
+                group_id: groupId
+            },
+            _sum: {
+                amount: true
+            }
+        });
 
-        const settlementsReceivedQuery = `
-            SELECT to_user_id as user_id, SUM(amount) as total_received
-            FROM settlements
-            WHERE group_id = $1
-            GROUP BY to_user_id
-        `;
+        // 4. Calculate Settlements Received
+        const settlementsReceived = await prisma.settlements.groupBy({
+            by: ['to_user_id'],
+            where: {
+                group_id: groupId
+            },
+            _sum: {
+                amount: true
+            }
+        });
 
-        const [paidResult, owedResult, givenResult, receivedResult, membersResult] = await Promise.all([
-            pool.query(expensesPaidQuery, [groupId]),
-            pool.query(expensesOwedQuery, [groupId]),
-            pool.query(settlementsGivenQuery, [groupId]),
-            pool.query(settlementsReceivedQuery, [groupId]),
-            pool.query('SELECT u.id, u.name FROM users u JOIN group_members gm ON u.id = gm.user_id WHERE gm.group_id = $1', [groupId])
-        ]);
-
+        // Calculate balances
         const balances = {};
-        
+
         // Initialize members
-        membersResult.rows.forEach(m => {
+        members.forEach(m => {
             balances[m.id] = { id: m.id, name: m.name, balance: 0.0 };
         });
 
         // Add Paid (Credit)
-        paidResult.rows.forEach(r => {
-            if (balances[r.user_id]) balances[r.user_id].balance += parseFloat(r.total_paid);
+        expensesPaid.forEach(r => {
+            if (balances[r.paid_by]) {
+                balances[r.paid_by].balance += parseFloat(r._sum.amount || 0);
+            }
         });
 
         // Subtract Owed (Debit)
-        owedResult.rows.forEach(r => {
-             if (balances[r.user_id]) balances[r.user_id].balance -= parseFloat(r.total_owed);
+        expensesOwed.forEach(r => {
+            if (balances[r.user_id]) {
+                balances[r.user_id].balance -= parseFloat(r._sum.amount_owed || 0);
+            }
         });
 
-        // Add Settlements Given (Credit - effectively paying off debt)
-        givenResult.rows.forEach(r => {
-             if (balances[r.user_id]) balances[r.user_id].balance += parseFloat(r.total_given);
+        // Add Settlements Given (Credit)
+        settlementsGiven.forEach(r => {
+            if (balances[r.from_user_id]) {
+                balances[r.from_user_id].balance += parseFloat(r._sum.amount || 0);
+            }
         });
 
-        // Subtract Settlements Received (Debit - effectively getting paid back)
-        receivedResult.rows.forEach(r => {
-             if (balances[r.user_id]) balances[r.user_id].balance -= parseFloat(r.total_received);
+        // Subtract Settlements Received (Debit)
+        settlementsReceived.forEach(r => {
+            if (balances[r.to_user_id]) {
+                balances[r.to_user_id].balance -= parseFloat(r._sum.amount || 0);
+            }
         });
 
         // Format for response
@@ -116,21 +142,29 @@ exports.createSettlement = async (req, res, next) => {
         }
 
         // Verify membership for both
-        const membersCheck = await pool.query(
-            'SELECT user_id FROM group_members WHERE group_id = $1 AND user_id IN ($2, $3)',
-            [groupId, fromUserId, toUserId]
-        );
+        const membersCount = await prisma.group_members.count({
+            where: {
+                group_id: groupId,
+                user_id: {
+                    in: [fromUserId, toUserId]
+                }
+            }
+        });
         
-        if (membersCheck.rows.length !== 2) {
+        if (membersCount !== 2) {
              return res.status(403).json({ error: 'One or both users are not in the group' });
         }
 
-        const result = await pool.query(
-            'INSERT INTO settlements (group_id, from_user_id, to_user_id, amount) VALUES ($1, $2, $3, $4) RETURNING *',
-            [groupId, fromUserId, toUserId, amount]
-        );
+        const settlement = await prisma.settlements.create({
+            data: {
+                group_id: groupId,
+                from_user_id: fromUserId,
+                to_user_id: toUserId,
+                amount
+            }
+        });
 
-        res.status(201).json({ message: 'Settlement recorded', settlement: result.rows[0] });
+        res.status(201).json({ message: 'Settlement recorded', settlement });
 
     } catch (error) {
         next(error);
@@ -142,17 +176,37 @@ exports.getSettlements = async (req, res, next) => {
     try {
         const { groupId } = req.params;
 
-        const result = await pool.query(
-            `SELECT s.*, u1.name as from_name, u2.name as to_name
-             FROM settlements s
-             JOIN users u1 ON s.from_user_id = u1.id
-             JOIN users u2 ON s.to_user_id = u2.id
-             WHERE s.group_id = $1
-             ORDER BY s.settled_at DESC`,
-            [groupId]
-        );
+        const settlements = await prisma.settlements.findMany({
+            where: {
+                group_id: groupId
+            },
+            include: {
+                users_settlements_from_user_idTousers: {
+                    select: {
+                        name: true
+                    }
+                },
+                users_settlements_to_user_idTousers: {
+                    select: {
+                        name: true
+                    }
+                }
+            },
+            orderBy: {
+                settled_at: 'desc'
+            }
+        });
+
+        // Format response to match original structure
+        const formattedSettlements = settlements.map(s => ({
+            ...s,
+            from_name: s.users_settlements_from_user_idTousers.name,
+            to_name: s.users_settlements_to_user_idTousers.name,
+            users_settlements_from_user_idTousers: undefined,
+            users_settlements_to_user_idTousers: undefined
+        }));
         
-        res.json(result.rows);
+        res.json(formattedSettlements);
     } catch (error) {
          next(error);
     }

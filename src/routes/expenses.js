@@ -9,5 +9,6 @@ router.use(authenticate);
 router.post('/', expenseController.createExpense);
 router.get('/group/:groupId', expenseController.getGroupExpenses);
 router.get('/:id', expenseController.getExpenseDetails);
+router.put('/:id', expenseController.updateExpense);
 
 module.exports = router;

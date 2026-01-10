@@ -1,4 +1,4 @@
-const pool = require('../config/database');
+const prisma = require('../config/prisma');
 
 // Create Expense
 exports.createExpense = async (req, res, next) => {
@@ -12,11 +12,14 @@ exports.createExpense = async (req, res, next) => {
         }
 
         // Verify membership
-        const memberCheck = await pool.query(
-            'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
-            [groupId, paidBy]
-        );
-        if (memberCheck.rows.length === 0) {
+        const isMember = await prisma.group_members.findFirst({
+            where: {
+                group_id: groupId,
+                user_id: paidBy
+            }
+        });
+
+        if (!isMember) {
             return res.status(403).json({ error: 'You are not a member of this group' });
         }
 
@@ -26,34 +29,32 @@ exports.createExpense = async (req, res, next) => {
              return res.status(400).json({ error: 'Split amounts do not equal total amount' });
         }
 
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
+        // Transaction with Prisma
+        const expense = await prisma.$transaction(async (tx) => {
             // 1. Create Expense
-            const expenseResult = await client.query(
-                'INSERT INTO expenses (group_id, title, amount, paid_by, split_type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-                [groupId, title, amount, paidBy, splitType]
-            );
-            const expense = expenseResult.rows[0];
+            const newExpense = await tx.expenses.create({
+                data: {
+                    group_id: groupId,
+                    title,
+                    amount,
+                    paid_by: paidBy,
+                    split_type: splitType
+                }
+            });
 
             // 2. Create Splits
-            for (const split of splits) {
-                await client.query(
-                    'INSERT INTO expense_splits (expense_id, user_id, amount_owed) VALUES ($1, $2, $3)',
-                    [expense.id, split.userId, split.amount]
-                );
-            }
+            await tx.expense_splits.createMany({
+                data: splits.map(split => ({
+                    expense_id: newExpense.id,
+                    user_id: split.userId,
+                    amount_owed: split.amount
+                }))
+            });
 
-            await client.query('COMMIT');
-            res.status(201).json({ message: 'Expense added successfully', expense });
+            return newExpense;
+        });
 
-        } catch (e) {
-            await client.query('ROLLBACK');
-            throw e;
-        } finally {
-            client.release();
-        }
+        res.status(201).json({ message: 'Expense added successfully', expense });
 
     } catch (error) {
         next(error);
@@ -66,24 +67,40 @@ exports.getGroupExpenses = async (req, res, next) => {
         const { groupId } = req.params;
 
         // Verify membership
-        const memberCheck = await pool.query(
-            'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
-            [groupId, req.user.id]
-        );
-        if (memberCheck.rows.length === 0) {
+        const isMember = await prisma.group_members.findFirst({
+            where: {
+                group_id: groupId,
+                user_id: req.user.id
+            }
+        });
+
+        if (!isMember) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        const result = await pool.query(
-            `SELECT e.*, u.name as paid_by_name 
-             FROM expenses e 
-             JOIN users u ON e.paid_by = u.id 
-             WHERE e.group_id = $1 
-             ORDER BY e.date DESC, e.created_at DESC`,
-            [groupId]
-        );
+        const expenses = await prisma.expenses.findMany({
+            where: { group_id: groupId },
+            include: {
+                users: {
+                    select: {
+                        name: true
+                    }
+                }
+            },
+            orderBy: [
+                { date: 'desc' },
+                { created_at: 'desc' }
+            ]
+        });
 
-        res.json(result.rows);
+        // Format response to match original structure
+        const formattedExpenses = expenses.map(expense => ({
+            ...expense,
+            paid_by_name: expense.users.name,
+            users: undefined
+        }));
+
+        res.json(formattedExpenses);
     } catch (error) {
         next(error);
     }
@@ -94,37 +111,133 @@ exports.getExpenseDetails = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        const expenseResult = await pool.query(
-            'SELECT e.*, u.name as paid_by_name FROM expenses e JOIN users u ON e.paid_by = u.id WHERE e.id = $1',
-             [id]
-        );
+        const expense = await prisma.expenses.findUnique({
+            where: { id },
+            include: {
+                users: {
+                    select: {
+                        name: true
+                    }
+                },
+                expense_splits: {
+                    include: {
+                        users: {
+                            select: {
+                                name: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
-        if (expenseResult.rows.length === 0) {
+        if (!expense) {
              return res.status(404).json({ error: 'Expense not found' });
         }
-        
-        const expense = expenseResult.rows[0];
 
         // Check group access for this expense
-        const memberCheck = await pool.query(
-            'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
-            [expense.group_id, req.user.id]
-        );
-        if (memberCheck.rows.length === 0) {
+        const isMember = await prisma.group_members.findFirst({
+            where: {
+                group_id: expense.group_id,
+                user_id: req.user.id
+            }
+        });
+
+        if (!isMember) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
-        const splitsResult = await pool.query(
-            `SELECT es.*, u.name as user_name 
-             FROM expense_splits es 
-             JOIN users u ON es.user_id = u.id 
-             WHERE es.expense_id = $1`,
-            [id]
-        );
+        // Format splits to match original structure
+        const formattedSplits = expense.expense_splits.map(split => ({
+            ...split,
+            user_name: split.users.name,
+            users: undefined
+        }));
 
         res.json({
             ...expense,
-            splits: splitsResult.rows
+            paid_by_name: expense.users.name,
+            splits: formattedSplits,
+            users: undefined,
+            expense_splits: undefined
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Update Expense
+exports.updateExpense = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { title, amount, splitType, splits } = req.body;
+        const userId = req.user.id;
+
+        // Validation
+        if (!title || !amount || !splitType || !splits) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Get the expense to check permissions
+        const expense = await prisma.expenses.findUnique({
+            where: { id }
+        });
+
+        if (!expense) {
+            return res.status(404).json({ error: 'Expense not found' });
+        }
+
+        // Verify membership in the group
+        const isMember = await prisma.group_members.findFirst({
+            where: {
+                group_id: expense.group_id,
+                user_id: userId
+            }
+        });
+
+        if (!isMember) {
+            return res.status(403).json({ error: 'You are not a member of this group' });
+        }
+
+        // Validate splits sum matches total amount
+        const totalSplitAmount = splits.reduce((sum, s) => sum + s.amount, 0);
+        if (Math.abs(totalSplitAmount - amount) > 0.01) { // Floating point tolerance
+            return res.status(400).json({ error: 'Split amounts do not equal total amount' });
+        }
+
+        // Transaction with Prisma
+        const updatedExpense = await prisma.$transaction(async (tx) => {
+            // 1. Update Expense
+            const updated = await tx.expenses.update({
+                where: { id },
+                data: {
+                    title,
+                    amount,
+                    split_type: splitType
+                }
+            });
+
+            // 2. Delete old splits
+            await tx.expense_splits.deleteMany({
+                where: { expense_id: id }
+            });
+
+            // 3. Create new splits
+            await tx.expense_splits.createMany({
+                data: splits.map(split => ({
+                    expense_id: id,
+                    user_id: split.userId,
+                    amount_owed: split.amount
+                }))
+            });
+
+            return updated;
+        });
+
+        res.json({ 
+            message: 'Expense updated successfully', 
+            expense: updatedExpense 
         });
 
     } catch (error) {
